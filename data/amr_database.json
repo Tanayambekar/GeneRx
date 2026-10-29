@@ -1,0 +1,142 @@
+{
+  "database_metadata": {
+    "version": "2026.2-WHO",
+    "guidelines_aligned": [
+      "WHO Bacterial Priority Pathogens List (May 2024)",
+      "CLSI M100 34th Edition (2024)",
+      "EUCAST Clinical Breakpoints v14.0 (2024)",
+      "CPIC MT-RNR1 Guideline (2024)"
+    ],
+    "kmer_size": 15
+  },
+  "pathogens": [
+    {
+      "id": "KPNEU",
+      "scientific_name": "Klebsiella pneumoniae",
+      "common_name": "CRE (Carbapenem-Resistant Enterobacterales)",
+      "kingdom": "Bacteria",
+      "gram_stain": "Gram-negative Bacilli",
+      "clinical_threat": "WHO Critical Priority Tier 1 (Ventilator Pneumonia / Sepsis)",
+      "signature_motif": "ATGCCGTAGCTAGCTGATCGATCGT",
+      "standard_culture_hours": 72
+    },
+    {
+      "id": "SAUR",
+      "scientific_name": "Staphylococcus aureus",
+      "common_name": "MRSA (Methicillin-Resistant Staph)",
+      "kingdom": "Bacteria",
+      "gram_stain": "Gram-positive Cocci",
+      "clinical_threat": "WHO High Priority (Surgical Sepsis / Endocarditis)",
+      "signature_motif": "GCAATCGTTAGCATCGATGCAATGC",
+      "standard_culture_hours": 72
+    },
+    {
+      "id": "ECOLI",
+      "scientific_name": "Escherichia coli",
+      "common_name": "ESBL E. coli",
+      "kingdom": "Bacteria",
+      "gram_stain": "Gram-negative Bacilli",
+      "clinical_threat": "WHO Critical Priority Tier 1 (Urosepsis / Pyelonephritis)",
+      "signature_motif": "AAGCTTGGCCAATTCGATCGATCTA",
+      "standard_culture_hours": 48
+    },
+    {
+      "id": "PAERUG",
+      "scientific_name": "Pseudomonas aeruginosa",
+      "common_name": "MDR Pseudomonas",
+      "kingdom": "Bacteria",
+      "gram_stain": "Gram-negative Bacilli",
+      "clinical_threat": "WHO Critical Priority Tier 1 (Burn Sepsis / CF Lung)",
+      "signature_motif": "CGGCTAGCTAGCTAGCATCGATGCT",
+      "standard_culture_hours": 72
+    },
+    {
+      "id": "INFLUA",
+      "scientific_name": "Influenza A Virus",
+      "common_name": "Seasonal Flu Virus",
+      "kingdom": "Virus",
+      "gram_stain": "Viral ssRNA",
+      "clinical_threat": "Respiratory Viral Infection (Antibiotics Strictly Ineffective)",
+      "signature_motif": "AGTAGAAACAAGGGTGTTTTTTCA",
+      "standard_culture_hours": 24
+    },
+    {
+      "id": "CAURIS",
+      "scientific_name": "Candida auris",
+      "common_name": "Superbug Hospital Yeast / Fungus",
+      "kingdom": "Fungi",
+      "gram_stain": "Fungal Yeast",
+      "clinical_threat": "CDC Urgent Threat / WHO Fungal Priority (Multidrug Resistant)",
+      "signature_motif": "TTTTCCCGGGAAATCGCGCGCGATA",
+      "standard_culture_hours": 96
+    }
+  ],
+  "resistance_genes": [
+    {
+      "gene_id": "blaNDM-1",
+      "target_organism": "Klebsiella pneumoniae / E. coli",
+      "enzyme_class": "Class B Metallo-beta-lactamase (Zinc-dependent)",
+      "motif": "ATGGAATTGCCCAATATTATGCAC",
+      "resistant_antibiotics": ["Meropenem", "Imipenem", "Ertapenem", "Ceftriaxone", "Ceftazidime-Avibactam", "Ampicillin"],
+      "effective_antibiotics": ["Colistin (Polymyxin E)", "Cefiderocol (Fetroja)", "Tigecycline"],
+      "clinical_rationale": "Zinc metal cofactor hydrolyzes all carbapenems and bypasses avibactam inhibition. Colistin or cefiderocol is required."
+    },
+    {
+      "gene_id": "blaKPC-2",
+      "target_organism": "Klebsiella pneumoniae",
+      "enzyme_class": "Class A Serine Carbapenemase",
+      "motif": "ATGTCACTGTATCGCCGTCTAGTT",
+      "resistant_antibiotics": ["Meropenem", "Imipenem", "Piperacillin-Tazobactam", "Cefepime"],
+      "effective_antibiotics": ["Ceftazidime-Avibactam (Zavicefta)", "Meropenem-Vaborbactam", "Colistin"],
+      "clinical_rationale": "Serine-active site carbapenemase. Avibactam specifically binds and inhibits KPC serine enzyme, restoring cephalosporin efficacy."
+    },
+    {
+      "gene_id": "mecA",
+      "target_organism": "Staphylococcus aureus",
+      "enzyme_class": "Low-affinity Penicillin-Binding Protein (PBP2a)",
+      "motif": "ATGAAAAAGATAAAAATTGTTCCAC",
+      "resistant_antibiotics": ["Penicillin G", "Oxacillin", "Methicillin", "Amoxicillin", "Cephalexin"],
+      "effective_antibiotics": ["Vancomycin (Glycopeptide)", "Linezolid (Oxazolidinone)", "Daptomycin"],
+      "clinical_rationale": "PBP2a has low binding affinity for all standard beta-lactams. Glycopeptide (Vancomycin) binds D-Ala-D-Ala cell wall precursors to bypass PBP2a."
+    },
+    {
+      "gene_id": "blaCTX-M-15",
+      "target_organism": "Escherichia coli",
+      "enzyme_class": "Extended-Spectrum Beta-Lactamase (ESBL)",
+      "motif": "ATGTGCAGYACCAGTAAAGTGATG",
+      "resistant_antibiotics": ["Ceftriaxone", "Cefotaxime", "Cefepime", "Aztreonam"],
+      "effective_antibiotics": ["Meropenem", "Ertapenem", "Amikacin"],
+      "clinical_rationale": "Hydrolyzes 3rd-generation cephalosporins. Carbapenems (Meropenem) remain the gold standard treatment for severe ESBL urosepsis."
+    },
+    {
+      "gene_id": "blaVIM-2",
+      "target_organism": "Pseudomonas aeruginosa",
+      "enzyme_class": "Class B Metallo-beta-lactamase (Zinc-dependent)",
+      "motif": "ATGTTCAAACTTTTGAGTAAGTTAT",
+      "resistant_antibiotics": ["Meropenem", "Imipenem", "Ceftazidime", "Cefepime", "Piperacillin-Tazobactam", "Ceftazidime-Avibactam"],
+      "effective_antibiotics": ["Cefiderocol", "Colistin (Polymyxin E)"],
+      "clinical_rationale": "VIM-2 zinc metallo-enzyme hydrolyzes carbapenems and cephalosporins. Avibactam cannot inhibit Class B metallo-enzymes."
+    },
+    {
+      "gene_id": "vanA",
+      "target_organism": "Enterococcus faecium / Enterococcus faecalis",
+      "enzyme_class": "Vancomycin Resistance Gene Cluster (D-Ala-D-Lac Ligase)",
+      "motif": "ATGAATAGAATAAAAGTTGCAATAC",
+      "resistant_antibiotics": ["Vancomycin", "Teicoplanin"],
+      "effective_antibiotics": ["Linezolid", "Daptomycin"],
+      "clinical_rationale": "vanA synthesizes modified peptidoglycan precursors terminating in D-Ala-D-Lac, drastically reducing vancomycin binding affinity."
+    }
+  ],
+  "host_pharmacogenomics": [
+    {
+      "marker_id": "MT-RNR1_m.1555A>G",
+      "gene": "MT-RNR1 (Mitochondrial 12S rRNA)",
+      "phenotype": "Aminoglycoside-Induced Ototoxicity (Permanent Deafness)",
+      "risk_motif": "CACCCTATTAACCACTCACGGGAGT",
+      "safe_motif": "CACCCTATTAACCACTCACGGGAGC",
+      "contraindicated_drugs": ["Gentamicin", "Amikacin", "Tobramycin", "Streptomycin"],
+      "guideline_citation": "CPIC 2024 / NICE Clinical Guidance (1 in 500 population carrier frequency)",
+      "warning": "Mitochondrial 12S rRNA mutation causes ribosome to structurally mimic bacterial 16S decoding site. Single dose triggers irreversible bilateral hearing loss."
+    }
+  ]
+}

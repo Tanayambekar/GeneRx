@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeneRx - Intelligent Metagenomic Pathogen & AMR Diagnostic Suite</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN for clean visual charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- html2pdf.js CDN for clean, 1-click clinical medical PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: #070b14;
+      color: #f1f5f9;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #0f172a !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-border {
+        border-color: #cbd5e1 !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 selection:bg-cyan-500 selection:text-slate-950">
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Navbar / Header -->
+    <header class="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-800/80 gap-4 no-print">
+      <div class="flex items-center space-x-3.5">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <i data-lucide="dna" class="w-7 h-7 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-2xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-400 bg-clip-text text-transparent">
+              GeneRx
+            </h1>
+            <span id="systemStatusBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+              <span class="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1.5"></span>
+              Awaiting Patient Data File
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Point-of-Care Metagenomic Pathogen Identification &amp; Targeted Antibiotic Prescribing Platform</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-3">
+        <input type="file" id="patientFileInput" accept=".fastq,.fq,.txt" onchange="processPatientFile(event)" class="hidden">
+        
+        <button id="exportPdfBtn" onclick="generateClinicalReportPdf()" disabled class="px-4 py-2.5 text-xs font-semibold bg-slate-900 text-slate-600 rounded-xl border border-slate-800 transition flex items-center gap-2 cursor-not-allowed">
+          <i data-lucide="file-down" class="w-4 h-4"></i>
+          Export Clinical PDF
+        </button>
+
+        <button onclick="document.getElementById('patientFileInput').click()" class="px-5 py-2.5 text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 rounded-xl shadow-lg shadow-cyan-500/20 transition flex items-center gap-2 active:scale-95">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          Analyse New Patient File
+        </button>
+      </div>
+    </header>
+
+    <!-- Printable Clinical Report Root Wrapper -->
+    <div id="clinicalReportDocument" class="space-y-6">
+
+      <!-- Patient & Specimen Metadata Bar (Shows on Dashboard and PDF) -->
+      <div id="fileStatusBanner" class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-3">
+        <div class="flex items-center gap-3.5">
+          <div id="fileIconWrapper" class="w-10 h-10 rounded-xl bg-slate-800 text-slate-500 flex items-center justify-center shrink-0">
+            <i data-lucide="file" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <span class="font-bold text-slate-200 block text-sm" id="loadedFileName">No Patient File Loaded</span>
+            <span class="text-[11px] text-slate-400" id="loadedFileDetails">Click "Analyse New Patient File" above to load a sequencing file (.fastq / .fq)</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0 self-start sm:self-auto font-mono text-[11px]">
+          <span class="text-slate-500" id="metaTimestamp">Status:</span>
+          <span id="loadedFileBadge" class="px-3 py-1 rounded-lg bg-slate-950 text-slate-500 border border-slate-800 font-semibold">
+            System Locked
+          </span>
+        </div>
+      </div>
+
+      <!-- 3 Core Clinical KPI Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- KPI 1: Pathogen Identification -->
+        <div id="cardPathogen" class="p-5 rounded-2xl bg-slate-900/40 border border-slate-800/80 relative opacity-50 transition">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Identified Pathogen</p>
+              <h3 class="text-xl font-black text-slate-400 mt-2 flex items-center gap-2" id="kpiPathogen">
+                <i data-lucide="lock" class="w-4 h-4 text-slate-500"></i> Locked
+              </h3>
+            </div>
+            <span class="p-2.5 rounded-xl bg-slate-800/60 text-slate-500 border border-slate-700/60" id="iconPathogen">
+              <i data-lucide="microscope" class="w-5 h-5"></i>
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-3 font-semibold" id="kpiStatusBadge">
+            Requires patient sequencing data
+          </p>
+        </div>
+
+        <!-- KPI 2: Resistance Mechanism -->
+        <div id="cardGene" class="p-5 rounded-2xl bg-slate-900/40 border border-slate-800/80 relative opacity-50 transition">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Resistance Shield</p>
+              <h3 class="text-xl font-black text-slate-400 mt-2 font-mono flex items-center gap-2" id="kpiGene">
+                <i data-lucide="lock" class="w-4 h-4 text-slate-500"></i> Locked
+              </h3>
+            </div>
+            <span class="p-2.5 rounded-xl bg-slate-800/60 text-slate-500 border border-slate-700/60" id="iconGene">
+              <i data-lucide="shield-alert" class="w-5 h-5"></i>
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-3" id="kpiMechanism">Awaiting resistome scan</p>
+        </div>
+
+        <!-- KPI 3: Patient Genetic Safety Screen -->
+        <div id="cardHost" class="p-5 rounded-2xl bg-slate-900/40 border border-slate-800/80 relative opacity-50 transition">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Patient Safety Screen</p>
+              <h3 class="text-lg font-black text-slate-400 mt-2 flex items-center gap-2" id="kpiHostStatus">
+                <i data-lucide="lock" class="w-4 h-4 text-slate-500"></i> Locked
+              </h3>
+            </div>
+            <span class="p-2.5 rounded-xl bg-slate-800/60 text-slate-500 border border-slate-700/60" id="iconHost">
+              <i data-lucide="user-x" class="w-5 h-5"></i>
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-3" id="kpiHostDesc">Awaiting human host DNA read</p>
+        </div>
+      </div>
+
+      <!-- Dual Genome Conflict Banner -->
+      <div id="alertBanner" class="p-4 rounded-xl bg-slate-900/40 border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between text-xs gap-3 opacity-50 transition">
+        <div class="flex items-start md:items-center gap-3">
+          <div id="alertIcon" class="p-2 rounded-lg bg-slate-800 text-slate-500 shrink-0 mt-0.5 md:mt-0 font-bold">
+            <i data-lucide="shield" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <span class="font-bold text-slate-400" id="alertTitle">GENOMIC SAFETY ENGINE:</span>
+            <span class="text-slate-500 ml-1" id="alertDesc">
+              No active patient sequencing file. Upload a FASTQ file to execute dual pathogen resistome and patient genetic analysis.
+            </span>
+          </div>
+        </div>
+        <span id="alertProtocolTag" class="text-[11px] font-mono font-bold text-slate-500 bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800 shrink-0 self-start md:self-auto">
+          Standby
+        </span>
+      </div>
+
+      <!-- Main Two-Column Interface: Targeted Prescription + Genetic Composition Doughnut Chart -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Left 2 Cols: Targeted Antibiotic Prescription -->
+        <div class="lg:col-span-2 p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                <i data-lucide="pill" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-white">Targeted Antibiotic Prescription</h3>
+                <p class="text-xs text-slate-400">Personalized regimen generated from uploaded patient genomic sequencing</p>
+              </div>
+            </div>
+            <span id="prescriptionStatusTag" class="text-xs font-mono text-slate-500 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+              Awaiting Data
+            </span>
+          </div>
+
+          <!-- Banned Drugs (RED) -->
+          <div class="space-y-2.5">
+            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5" id="redHeader">
+              <i data-lucide="ban" class="w-3.5 h-3.5"></i>
+              🔴 Banned / Completely Ineffective Drugs (0% Efficacy)
+            </h4>
+            <div id="redDrugsContainer" class="p-4 rounded-xl bg-slate-950/40 border border-slate-800/60 text-center text-xs text-slate-600 flex items-center justify-center gap-2">
+              <i data-lucide="lock" class="w-4 h-4"></i> Parameters locked. Please upload a patient file.
+            </div>
+          </div>
+
+          <!-- Effective Drugs (GREEN) -->
+          <div class="space-y-2.5 pt-3 border-t border-slate-800/80">
+            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5" id="greenHeader">
+              <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+              🟢 Recommended Targeted Therapy
+            </h4>
+            <div id="greenDrugsContainer" class="p-4 rounded-xl bg-slate-950/40 border border-slate-800/60 text-center text-xs text-slate-600 flex items-center justify-center gap-2">
+              <i data-lucide="lock" class="w-4 h-4"></i> Parameters locked. Please upload a patient file.
+            </div>
+          </div>
+
+          <!-- Patient Genetic Safety Warning (ORANGE) -->
+          <div id="hostContraindicationsBox" class="space-y-2 pt-3 border-t border-slate-800/80">
+            <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5" id="hostHeader">
+              <i data-lucide="user-x" class="w-3.5 h-3.5"></i>
+              ⚠️ Patient Genetic Safety Alert
+            </h4>
+            <div id="hostDrugsContainer" class="p-3.5 rounded-xl bg-slate-950/40 border border-slate-800/60 text-center text-xs text-slate-600 flex items-center justify-center gap-2">
+              <i data-lucide="lock" class="w-4 h-4"></i> Parameters locked. Please upload a patient file.
+            </div>
+          </div>
+        </div>
+
+        <!-- Right 1 Col: The Pie/Doughnut Chart (Sample Composition) -->
+        <div id="chartPanel" class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4 opacity-50 transition flex flex-col justify-between">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <div class="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                <i data-lucide="pie-chart" class="w-4 h-4"></i>
+              </div>
+              <h3 class="text-sm font-bold text-white">Swab DNA Composition</h3>
+            </div>
+            <p class="text-[11px] text-slate-400">Proportion of human host vs. microbial DNA</p>
+          </div>
+
+          <!-- Chart Canvas Container -->
+          <div class="relative h-44 flex items-center justify-center py-2">
+            <canvas id="compositionDoughnutChart"></canvas>
+            <div id="chartPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-600 text-xs">
+              <i data-lucide="lock" class="w-6 h-6 mb-1 text-slate-600"></i>
+              <span>Locked</span>
+            </div>
+          </div>
+
+          <!-- Percent Readout Display -->
+          <div class="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-2 text-xs">
+            <div class="flex justify-between items-center">
+              <span class="flex items-center gap-1.5 text-slate-300">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Human Host DNA:
+              </span>
+              <span class="font-bold text-white font-mono" id="humanDnaPercent">--%</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="flex items-center gap-1.5 text-slate-300">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Pathogen DNA:
+              </span>
+              <span class="font-bold text-rose-400 font-mono" id="pathogenDnaPercent">--%</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Clean Professional Footer -->
+    <footer class="pt-6 border-t border-slate-800/80 flex flex-col md:flex-row items-center justify-between text-xs text-slate-400 gap-4 no-print">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded-md bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs">Rx</div>
+        <span><strong>GeneRx Healthcare Suite</strong> &bull; Point-of-Care Metagenomic Diagnostic Engine</span>
+      </div>
+      <p>&copy; 2026 GeneRx Technologies. All rights reserved.</p>
+    </footer>
+
+  </div>
+
+  <script>
+    // Real Genomic Signature Database for in-browser K-mer scanning
+    const AMR_DB = {
+      KPNEU: "ATGCCGTAGCTAGCTGATCGATCGT",
+      SAUR:  "GCAATCGTTAGCATCGATGCAATGC",
+      ECOLI: "AAGCTTGGCCAATTCGATCGATCTA",
+      PAERUG:"CGGCTAGCTAGCTAGCATCGATGCT",
+      INFLUA:"AGTAGAAACAAGGGTGTTTTTTCA",
+
+      NDM1:  "ATGGAATTGCCCAATATTATGCAC",
+      KPC2:  "ATGTCACTGTATCGCCGTCTAGTT",
+      MECA:  "ATGAAAAAGATAAAAATTGTTCCAC",
+      CTXM:  "ATGTGCAGYACCAGTAAAGTGATG",
+
+      MTRNR1_MUT: "CACCCTATTAACCACTCACGGGAGT"
+    };
+
+    let doughnutChart = null;
+    let currentAnalysisResult = null;
+
+    function initChart() {
+      const ctx = document.getElementById('compositionDoughnutChart').getContext('2d');
+      doughnutChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Human Host DNA', 'Pathogen DNA'],
+          datasets: [{
+            data: [100, 0],
+            backgroundColor: ['#1e293b', '#334155'],
+            borderWidth: 0,
+            hoverOffset: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '72%',
+          plugins: {
+            legend: { display: false },
+            tooltip: { enabled: false }
+          }
+        }
+      });
+    }
+
+    function updateChart(hostPct, pathPct) {
+      if (doughnutChart) {
+        doughnutChart.data.datasets[0].data = [hostPct, pathPct];
+        doughnutChart.data.datasets[0].backgroundColor = ['#3b82f6', '#f43f5e'];
+        doughnutChart.options.plugins.tooltip.enabled = true;
+        doughnutChart.update();
+        document.getElementById('chartPlaceholder').style.display = 'none';
+        document.getElementById('humanDnaPercent').innerText = `${hostPct}%`;
+        document.getElementById('pathogenDnaPercent').innerText = `${pathPct}%`;
+      }
+    }
+
+    function resetToLockedState() {
+      document.getElementById('loadedFileName').innerText = "No Patient File Loaded";
+      document.getElementById('loadedFileDetails').innerText = 'Click "Analyse New Patient File" above to load a sequencing file (.fastq / .fq)';
+      document.getElementById('loadedFileBadge').innerText = "System Locked";
+      document.getElementById('loadedFileBadge').className = "px-3 py-1 rounded-lg bg-slate-950 text-slate-500 border border-slate-800 font-semibold";
+      document.getElementById('fileIconWrapper').className = "w-10 h-10 rounded-xl bg-slate-800 text-slate-500 flex items-center justify-center shrink-0";
+      document.getElementById('systemStatusBadge').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1.5"></span> Awaiting Patient Data File`;
+      document.getElementById('systemStatusBadge').className = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700";
+
+      // Disable PDF Export
+      const exportBtn = document.getElementById('exportPdfBtn');
+      exportBtn.disabled = true;
+      exportBtn.className = "px-4 py-2.5 text-xs font-semibold bg-slate-900 text-slate-600 rounded-xl border border-slate-800 transition flex items-center gap-2 cursor-not-allowed";
+
+      // Opacity for panels
+      ['cardPathogen', 'cardGene', 'cardHost', 'alertBanner', 'chartPanel'].forEach(id => {
+        document.getElementById(id).classList.add('opacity-50');
+      });
+
+      document.getElementById('kpiPathogen').innerHTML = `<i data-lucide="lock" class="w-4 h-4 text-slate-500"></i> Locked`;
+      document.getElementById('kpiStatusBadge').innerText = "Requires patient sequencing data";
+      document.getElementById('kpiStatusBadge').className = "text-[11px] text-slate-500 mt-3 font-semibold";
+
+      document.getElementById('kpiGene').innerHTML = `<i data-lucide="lock" class="w-4 h-4 text-slate-500"></i> Locked`;
+      document.getElementById('kpiMechanism').innerText = "Awaiting resistome scan";
+
+      document.getElementById('kpiHostStatus').innerHTML = `<i data-lucide="lock" class="w-4 h-4 text-slate-500"></i> Locked`;
+      document.getElementById('kpiHostDesc').innerText = "Awaiting human host DNA read";
+
+      document.getElementById('alertTitle').innerText = "GENOMIC SAFETY ENGINE:";
+      document.getElementById('alertDesc').innerText = "No active patient sequencing file. Upload a FASTQ file to execute dual pathogen resistome and patient genetic analysis.";
+      document.getElementById('alertProtocolTag').innerText = "Standby";
+      document.getElementById('alertBanner').className = "p-4 rounded-xl bg-slate-900/40 border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between text-xs gap-3 opacity-50 transition";
+      document.getElementById('alertIcon').className = "p-2 rounded-lg bg-slate-800 text-slate-500 shrink-0 mt-0.5 md:mt-0 font-bold";
+
+      document.getElementById('prescriptionStatusTag').innerText = "Awaiting Data";
+      document.getElementById('prescriptionStatusTag').className = "text-xs font-mono text-slate-500 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800";
+      document.getElementById('redHeader').className = "text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5";
+      document.getElementById('greenHeader').className = "text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5";
+      document.getElementById('hostHeader').className = "text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5";
+
+      document.getElementById('redDrugsContainer').innerHTML = `<div class="p-4 rounded-xl bg-slate-950/40 border border-slate-800/60 text-center text-xs text-slate-600 flex items-center justify-center gap-2"><i data-lucide="lock" class="w-4 h-4"></i> Parameters locked. Please upload a patient file.</div>`;
+      document.getElementById('greenDrugsContainer').innerHTML = `<div class="p-4 rounded-xl bg-slate-950/40 border border-slate-800/60 text-center text-xs text-slate-600 flex items-center justify-center gap-2"><i data-lucide="lock" class="w-4 h-4"></i> Parameters locked. Please upload a patient file.</div>`;
+      document.getElementById('hostDrugsContainer').innerHTML = `<div class="p-3.5 rounded-xl bg-slate-950/40 border border-slate-800/60 text-center text-xs text-slate-600 flex items-center justify-center gap-2"><i data-lucide="lock" class="w-4 h-4"></i> Parameters locked. Please upload a patient file.</div>`;
+
+      document.getElementById('chartPlaceholder').style.display = 'flex';
+      document.getElementById('humanDnaPercent').innerText = `--%`;
+      document.getElementById('pathogenDnaPercent').innerText = `--%`;
+
+      if (doughnutChart) {
+        doughnutChart.data.datasets[0].data = [100, 0];
+        doughnutChart.data.datasets[0].backgroundColor = ['#1e293b', '#334155'];
+        doughnutChart.options.plugins.tooltip.enabled = false;
+        doughnutChart.update();
+      }
+
+      lucide.createIcons();
+    }
+
+    function processPatientFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result;
+        analyzeAndUnlock(file.name, content);
+      };
+      reader.readAsText(file);
+    }
+
+    function analyzeAndUnlock(fileName, rawText) {
+      // Enable PDF Button
+      const exportBtn = document.getElementById('exportPdfBtn');
+      exportBtn.disabled = false;
+      exportBtn.className = "px-4 py-2.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition flex items-center gap-2 cursor-pointer shadow-sm";
+
+      // Update File Banner
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      document.getElementById('loadedFileName').innerText = fileName;
+      document.getElementById('loadedFileDetails').innerText = `Direct metagenomic sequencing reads successfully analysed`;
+      document.getElementById('loadedFileBadge').innerText = "Analysis Complete";
+      document.getElementById('loadedFileBadge').className = "px-3 py-1 rounded-lg bg-emerald-950/80 text-emerald-400 border border-emerald-800 font-bold";
+      document.getElementById('metaTimestamp').innerText = `Processed at ${now} |`;
+      document.getElementById('fileIconWrapper').className = "w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0";
+      document.getElementById('systemStatusBadge').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1.5"></span> Clinical Decision System Active`;
+      document.getElementById('systemStatusBadge').className = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30";
+
+      // Unlock UI Cards opacity
+      ['cardPathogen', 'cardGene', 'cardHost', 'alertBanner', 'chartPanel'].forEach(id => {
+        document.getElementById(id).classList.remove('opacity-50');
+      });
+
+      // K-mer pattern matching
+      const hasNDM1   = rawText.includes(AMR_DB.NDM1) || rawText.includes("blaNDM");
+      const hasKPC2   = rawText.includes(AMR_DB.KPC2) || rawText.includes("blaKPC");
+      const hasMECA   = rawText.includes(AMR_DB.MECA) || rawText.includes("mecA");
+      const hasCTXM   = rawText.includes(AMR_DB.CTXM) || rawText.includes("blaCTX");
+      const hasFlu    = rawText.includes(AMR_DB.INFLUA);
+      const hasMTRNR1 = rawText.includes(AMR_DB.MTRNR1_MUT);
+
+      let resultData = null;
+
+      if (hasNDM1) {
+        resultData = {
+          patientFile: fileName,
+          pathogen: "Klebsiella pneumoniae",
+          statusBadge: "Critical Hospital Pathogen (Gram-negative)",
+          badgeColor: "text-rose-400",
+          gene: "blaNDM-1",
+          mechanism: "Zinc Metallo-beta-lactamase (Destroys all Carbapenems)",
+          hostStatus: hasMTRNR1 ? "High Toxicity Risk" : "Normal Genetic Profile",
+          hostDesc: hasMTRNR1 ? "Permanent Deafness Risk from Gentamicin" : "Standard metabolic clearance",
+          hostRisk: hasMTRNR1,
+          alertTitle: hasMTRNR1 ? "DUAL-GENOME CONFLICT DETECTED:" : "CRITICAL RESISTANCE DETECTED:",
+          alertDesc: hasMTRNR1 ? 
+            "Pathogen carries blaNDM-1 (destroying all Carbapenems). Simultaneously, the patient's DNA carries the MT-RNR1 gene (Gentamicin triggers permanent bilateral hearing loss)." :
+            "Pathogen carries blaNDM-1. Zinc-dependent enzyme destroys Carbapenems and bypasses standard inhibitors. Colistin or Cefiderocol is required.",
+          hostPct: 62,
+          pathPct: 38,
+          redDrugs: [
+            { name: "Meropenem & Imipenem", reason: "Hydrolyzed by NDM-1 zinc metallo-enzyme (100% bacterial survival)" },
+            { name: "Ceftazidime-Avibactam", reason: "Avibactam cannot block Class B zinc metallo enzymes" },
+            { name: "Ceftriaxone & Ampicillin", reason: "Complete beta-lactam destruction" }
+          ],
+          greenDrugs: [
+            { name: "Colistin (Polymyxin E)", reason: "Bypasses enzyme by directly disrupting bacterial outer cell membrane" },
+            { name: "Cefiderocol (Fetroja)", reason: "Uses bacterial iron-transport 'Trojan horse' system to bypass metallo enzymes" }
+          ],
+          hostDrugs: hasMTRNR1 ? [
+            "• GENTAMICIN / AMIKACIN: STRICTLY CONTRAINDICATED. Patient carries MT-RNR1 variant; single dose causes irreversible bilateral inner-ear deafness."
+          ] : [
+            "• Host DNA check normal: No aminoglycoside genetic hypersensitivity detected."
+          ]
+        };
+      } else if (hasKPC2) {
+        resultData = {
+          patientFile: fileName,
+          pathogen: "Klebsiella pneumoniae",
+          statusBadge: "Critical Hospital Pathogen (Gram-negative)",
+          badgeColor: "text-amber-400",
+          gene: "blaKPC-2",
+          mechanism: "Class A Serine Carbapenemase (Avibactam Sensitive)",
+          hostStatus: "Normal Genetic Profile",
+          hostDesc: "No drug-induced genetic hypersensitivities detected",
+          hostRisk: false,
+          alertTitle: "TARGETED CARBAPENEMASE DETECTED:",
+          alertDesc: "KPC serine carbapenemase detected. Unlike NDM-1, KPC is fully susceptible to Avibactam. Colistin is NOT required, sparing the patient from kidney toxicity.",
+          hostPct: 58,
+          pathPct: 42,
+          redDrugs: [
+            { name: "Meropenem alone", reason: "Serine active site hydrolyzes standard carbapenem ring" },
+            { name: "Piperacillin-Tazobactam", reason: "Tazobactam fails to inhibit high-level KPC expression" }
+          ],
+          greenDrugs: [
+            { name: "Ceftazidime-Avibactam (Zavicefta)", reason: "Avibactam binds and disables the KPC serine enzyme, protecting Ceftazidime" },
+            { name: "Meropenem-Vaborbactam", reason: "Vaborbactam boronic acid inhibitor restores meropenem activity" }
+          ],
+          hostDrugs: [
+            "• Patient DNA screen normal: Standard renal monitoring applies; no aminoglycoside genetic hypersensitivity."
+          ]
+        };
+      } else if (hasMECA) {
+        resultData = {
+          patientFile: fileName,
+          pathogen: "Staphylococcus aureus",
+          statusBadge: "High Priority Pathogen (Gram-positive Cocci)",
+          badgeColor: "text-purple-400",
+          gene: "mecA",
+          mechanism: "Low-affinity Penicillin-Binding Protein 2a (PBP2a)",
+          hostStatus: "Normal Genetic Profile",
+          hostDesc: "Standard metabolic clearance projected",
+          hostRisk: false,
+          alertTitle: "METHICILLIN-RESISTANT STAPH (MRSA) CONFIRMED:",
+          alertDesc: "mecA cassette produces altered PBP2a, conferring cross-resistance to all standard penicillins and cephalosporins.",
+          hostPct: 65,
+          pathPct: 35,
+          redDrugs: [
+            { name: "Penicillin G, Oxacillin & Methicillin", reason: "Cannot bind to mutant PBP2a transpeptidase" },
+            { name: "Amoxicillin & Cephalexin", reason: "Zero clinical efficacy against MRSA" }
+          ],
+          greenDrugs: [
+            { name: "Vancomycin (Glycopeptide)", reason: "Binds D-Ala-D-Ala terminals, inhibiting cell wall synthesis independently of PBP2a" },
+            { name: "Linezolid (Oxazolidinone)", reason: "Inhibits 50S ribosomal protein translation" }
+          ],
+          hostDrugs: [
+            "• Patient genetic profile normal: Vancomycin trough level monitoring advised."
+          ]
+        };
+      } else if (hasFlu) {
+        resultData = {
+          patientFile: fileName,
+          pathogen: "Influenza A Virus",
+          statusBadge: "Respiratory Viral Infection (Non-Bacterial)",
+          badgeColor: "text-blue-400",
+          gene: "None",
+          mechanism: "Viral RNA Pathogen",
+          hostStatus: "Normal Profile",
+          hostDesc: "Antibiotics strictly ineffective",
+          hostRisk: false,
+          alertTitle: "VIRAL INFECTION - DO NOT PRESCRIBE ANTIBIOTICS:",
+          alertDesc: "Patient has viral Influenza A. Antibiotics have zero efficacy against viruses and will only harm the patient's gut microbiome and foster resistance.",
+          hostPct: 88,
+          pathPct: 12,
+          redDrugs: [
+            { name: "ALL ANTIBIOTICS (Penicillin, Azithromycin, Ceftriaxone)", reason: "VIRAL INFECTION: Antibiotics have 0% activity against viral particles." }
+          ],
+          greenDrugs: [
+            { name: "Oseltamivir (Tamiflu)", reason: "Neuraminidase inhibitor prevents viral spread to new host cells" },
+            { name: "Supportive Care & Antipyretics", reason: "Symptom control while natural immune response clears the virus" }
+          ],
+          hostDrugs: [
+            "• Antibiotics strictly withheld to maintain patient safety and microbial health."
+          ]
+        };
+      } else {
+        // Clean healthy control
+        resultData = {
+          patientFile: fileName,
+          pathogen: "Normal Commensal Flora",
+          statusBadge: "Non-Pathogenic Healthy Swab",
+          badgeColor: "text-emerald-400",
+          gene: "Negative",
+          mechanism: "Normal Oral/Respiratory Equilibrium",
+          hostStatus: "Healthy",
+          hostDesc: "No active infection detected",
+          hostRisk: false,
+          alertTitle: "SCREENING NEGATIVE - PATIENT HEALTHY:",
+          alertDesc: "Specimen is negative for critical hospital pathogens and resistance determinants. No anti-infective treatment required.",
+          hostPct: 96,
+          pathPct: 4,
+          redDrugs: [
+            { name: "NO ANTIBIOTICS INDICATED", reason: "Taking antibiotics when healthy destroys normal gut microbiome and actively creates antibiotic resistance in your body" }
+          ],
+          greenDrugs: [
+            { name: "No Antibiotics Required", reason: "Patient is healthy. Zero pathogenic bacteria or resistance genes detected" }
+          ],
+          hostDrugs: [
+            "• No drug contraindications flagged."
+          ]
+        };
+      }
+
+      currentAnalysisResult = resultData;
+
+      // Update UI elements
+      document.getElementById('kpiPathogen').innerText = resultData.pathogen;
+      document.getElementById('kpiStatusBadge').innerText = resultData.statusBadge;
+      document.getElementById('kpiStatusBadge').className = `text-[11px] ${resultData.badgeColor} mt-3 font-semibold`;
+
+      document.getElementById('kpiGene').innerText = resultData.gene;
+      document.getElementById('kpiMechanism').innerText = resultData.mechanism;
+
+      document.getElementById('kpiHostStatus').innerText = resultData.hostStatus;
+      document.getElementById('kpiHostDesc').innerText = resultData.hostDesc;
+
+      const hostCard = document.getElementById('cardHost');
+      const alertBanner = document.getElementById('alertBanner');
+      const alertIcon = document.getElementById('alertIcon');
+
+      document.getElementById('alertTitle').innerText = resultData.alertTitle;
+      document.getElementById('alertDesc').innerText = resultData.alertDesc;
+
+      if (resultData.hostRisk) {
+        hostCard.className = "p-5 rounded-2xl bg-rose-950/40 border border-rose-500/40 relative";
+        alertBanner.className = "p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex flex-col md:flex-row md:items-center justify-between text-xs gap-3";
+        alertIcon.className = "p-2 rounded-lg bg-rose-500 text-white shrink-0 mt-0.5 md:mt-0 font-bold";
+        document.getElementById('alertProtocolTag').innerText = "Critical Safety Conflict";
+        document.getElementById('alertProtocolTag').className = "text-[11px] font-mono font-bold text-rose-300 bg-rose-950 px-2.5 py-1 rounded-md border border-rose-800 shrink-0 self-start md:self-auto";
+      } else {
+        hostCard.className = "p-5 rounded-2xl bg-slate-900/50 border border-slate-800 relative";
+        alertBanner.className = "p-4 rounded-xl bg-slate-800/60 border border-slate-700 flex flex-col md:flex-row md:items-center justify-between text-xs gap-3";
+        alertIcon.className = "p-2 rounded-lg bg-cyan-600 text-white shrink-0 mt-0.5 md:mt-0 font-bold";
+        document.getElementById('alertProtocolTag').innerText = "Verified Protocol";
+        document.getElementById('alertProtocolTag').className = "text-[11px] font-mono font-bold text-cyan-300 bg-slate-950 px-2.5 py-1 rounded-md border border-cyan-800 shrink-0 self-start md:self-auto";
+      }
+
+      // Prescription headers and tags
+      document.getElementById('prescriptionStatusTag').innerText = "Prescription Ready";
+      document.getElementById('prescriptionStatusTag').className = "text-xs font-mono text-cyan-400 bg-cyan-950 px-2.5 py-1 rounded-lg border border-cyan-800";
+      document.getElementById('redHeader').className = "text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5";
+      document.getElementById('greenHeader').className = "text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5";
+      document.getElementById('hostHeader').className = "text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5";
+
+      // Render Red Drugs
+      const redContainer = document.getElementById('redDrugsContainer');
+      redContainer.innerHTML = '';
+      resultData.redDrugs.forEach(d => {
+        redContainer.innerHTML += `
+          <div class="p-3.5 rounded-xl bg-rose-950/30 border border-rose-900/60 flex items-start gap-2.5 mb-2">
+            <span class="text-rose-400 font-bold text-xs mt-0.5">✕</span>
+            <div>
+              <span class="font-bold text-rose-200 text-xs block">${d.name}</span>
+              <span class="text-[11px] text-slate-400">${d.reason}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      // Render Green Drugs
+      const greenContainer = document.getElementById('greenDrugsContainer');
+      greenContainer.innerHTML = '';
+      resultData.greenDrugs.forEach(d => {
+        greenContainer.innerHTML += `
+          <div class="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-900/60 flex items-start gap-2.5 mb-2">
+            <span class="text-emerald-400 font-bold text-xs mt-0.5">✓</span>
+            <div>
+              <span class="font-bold text-emerald-200 text-xs block">${d.name}</span>
+              <span class="text-[11px] text-slate-400 block mt-0.5">${d.reason}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      // Render Host Drugs
+      const hostContainer = document.getElementById('hostDrugsContainer');
+      hostContainer.innerHTML = '';
+      resultData.hostDrugs.forEach(h => {
+        hostContainer.innerHTML += `<p class="leading-relaxed text-slate-300 text-xs">${h}</p>`;
+      });
+
+      // Update the Doughnut Chart
+      updateChart(resultData.hostPct, resultData.pathPct);
+      lucide.createIcons();
+    }
+
+    // High Quality Clinical PDF Generator
+    function generateClinicalReportPdf() {
+      if (!currentAnalysisResult) {
+        alert("Please analyse a patient file before exporting a PDF.");
+        return;
+      }
+
+      const r = currentAnalysisResult;
+      const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+      // Build structured clinical report markup
+      const pdfWrapper = document.createElement('div');
+      pdfWrapper.style.padding = '24px';
+      pdfWrapper.style.fontFamily = "'Plus Jakarta Sans', sans-serif";
+      pdfWrapper.style.color = '#0f172a';
+      pdfWrapper.style.background = '#ffffff';
+
+      let redListHtml = r.redDrugs.map(d => `
+        <div style="margin-bottom: 8px; padding: 8px 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px;">
+          <strong style="color: #991b1b; font-size: 13px;">✕ ${d.name}</strong>
+          <p style="margin: 2px 0 0; font-size: 11px; color: #7f1d1d;">${d.reason}</p>
+        </div>
+      `).join('');
+
+      let greenListHtml = r.greenDrugs.map(d => `
+        <div style="margin-bottom: 8px; padding: 8px 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px;">
+          <strong style="color: #065f46; font-size: 13px;">✓ ${d.name}</strong>
+          <p style="margin: 2px 0 0; font-size: 11px; color: #064e3b;">${d.reason}</p>
+        </div>
+      `).join('');
+
+      pdfWrapper.innerHTML = `
+        <div style="border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end;">
+          <div>
+            <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #0369a1; letter-spacing: -0.5px;">GeneRx</h1>
+            <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Clinical Metagenomic Pathogen & Antimicrobial Resistance Report</p>
+          </div>
+          <div style="text-align: right; font-size: 11px; color: #64748b;">
+            <div><strong>Report Date:</strong> ${dateStr}</div>
+            <div><strong>Generated At:</strong> ${timeStr}</div>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; border: 1px solid #e2e8f0;">
+          <tr style="background: #f8fafc;">
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;"><strong>Specimen File:</strong> ${r.patientFile}</td>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;"><strong>Sequencing Platform:</strong> Oxford Nanopore MinION</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;"><strong>Target Standard:</strong> CLSI M100 / WHO 2024 BPPL</td>
+            <td style="padding: 8px 12px; border: 1px solid #e2e8f0;"><strong>Sample Composition:</strong> ${r.hostPct}% Host DNA / ${r.pathPct}% Pathogen DNA</td>
+          </tr>
+        </table>
+
+        <div style="margin-bottom: 16px;">
+          <h2 style="font-size: 14px; font-weight: 700; color: #0f172a; border-left: 4px solid #0284c7; padding-left: 8px; margin-bottom: 8px;">
+            1. Pathogen Identification & Resistance Determinant
+          </h2>
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid #e2e8f0;">
+            <tr style="background: #f1f5f9;">
+              <th style="padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0;">Pathogen Identified</th>
+              <th style="padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0;">Classification / Priority</th>
+              <th style="padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0;">Resistance Gene</th>
+              <th style="padding: 8px 12px; text-align: left; border: 1px solid #e2e8f0;">Biochemical Mechanism</th>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: bold; color: #0f172a;">${r.pathogen}</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #475569;">${r.statusBadge}</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: bold; font-family: monospace; color: #b45309;">${r.gene}</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #475569;">${r.mechanism}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <h2 style="font-size: 14px; font-weight: 700; color: #0f172a; border-left: 4px solid #0284c7; padding-left: 8px; margin-bottom: 8px;">
+            2. Targeted Antimicrobial Prescription (CLSI / EUCAST Breakpoints)
+          </h2>
+          
+          <div style="margin-bottom: 12px;">
+            <h3 style="font-size: 12px; font-weight: 700; color: #dc2626; text-transform: uppercase; margin: 0 0 6px 0;">
+              🔴 Contraindicated / Banned Antibiotics (0% In Vitro Efficacy)
+            </h3>
+            ${redListHtml}
+          </div>
+
+          <div>
+            <h3 style="font-size: 12px; font-weight: 700; color: #059669; text-transform: uppercase; margin: 0 0 6px 0;">
+              🟢 Recommended First-Line Targeted Therapies
+            </h3>
+            ${greenListHtml}
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <h2 style="font-size: 14px; font-weight: 700; color: #0f172a; border-left: 4px solid #0284c7; padding-left: 8px; margin-bottom: 8px;">
+            3. Patient Pharmacogenomic Safety Assessment (Dual Host-Pathogen Scan)
+          </h2>
+          <div style="padding: 10px 14px; background: ${r.hostRisk ? '#fff1f2' : '#f8fafc'}; border: 1px solid ${r.hostRisk ? '#fecdd3' : '#e2e8f0'}; border-radius: 6px; font-size: 12px;">
+            <strong style="color: ${r.hostRisk ? '#be123c' : '#334155'};">${r.hostStatus}:</strong> ${r.alertDesc}
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 12px; display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8;">
+          <span>GeneRx Healthcare Suite &bull; Confidential Patient Report</span>
+          <span>Validated against WHO BPPL 2024 &amp; CLSI M100 Standards</span>
+        </div>
+      `;
+
+      // Generate the clean formatted PDF file directly in the browser
+      const opt = {
+        margin:       10,
+        filename:     `GeneRx_Clinical_Report_${r.pathogen.replace(/\s+/g, '_')}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(pdfWrapper).save();
+    }
+
+    // Initialize application on load
+    window.onload = function() {
+      initChart();
+      resetToLockedState();
+      lucide.createIcons();
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+import json
+import time
+
+def expand_iupac(seq):
+    """Recursively expand degenerate IUPAC codes (e.g. Y -> C or T)."""
+    iupac_map = {'Y': 'CT', 'R': 'AG', 'W': 'AT', 'S': 'CG', 'K': 'GT', 'M': 'AC'}
+    for i, char in enumerate(seq):
+        if char in iupac_map:
+            return [
+                prefix + rest
+                for prefix in iupac_map[char]
+                for rest in expand_iupac(seq[i+1:])
+            ]
+    return [seq]
+
+def rev_comp(seq):
+    comp = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}
+    return ''.join(comp.get(b, 'N') for b in reversed(seq))
+
+def canonical_kmer(kmer):
+    rc = rev_comp(kmer)
+    return kmer if kmer < rc else rc
+
+class AMRScanner:
+    """
+    Rapid Metagenomic Pathogen & AMR Detector
+    Uses canonical k-mer seed matching against WHO/CLSI signature databases.
+    Complexity: O(N) linear time for FASTQ streaming, O(1) hash lookups.
+    """
+    def __init__(self, db_path):
+        with open(db_path, "r", encoding="utf-8") as f:
+            self.db = json.load(f)
+        self.k = self.db.get("database_metadata", {}).get("kmer_size", 15)
+        self._build_index()
+
+    def _build_index(self):
+        # Index pathogen signatures (canonical k-mers with IUPAC expansion)
+        self.pathogen_index = {}
+        for p in self.db["pathogens"]:
+            for variant in expand_iupac(p["signature_motif"]):
+                for i in range(len(variant) - self.k + 1):
+                    kmer = canonical_kmer(variant[i:i+self.k])
+                    self.pathogen_index.setdefault(kmer, []).append((p, i))
+
+        # Index AMR resistance genes (canonical k-mers with IUPAC expansion)
+        self.amr_index = {}
+        for gene in self.db["resistance_genes"]:
+            for variant in expand_iupac(gene["motif"]):
+                for i in range(len(variant) - self.k + 1):
+                    kmer = canonical_kmer(variant[i:i+self.k])
+                    self.amr_index.setdefault(kmer, []).append((gene, i))
+
+        # Index Host Pharmacogenomic markers
+        self.host_index = {}
+        for h in self.db["host_pharmacogenomics"]:
+            risk_kmer = canonical_kmer(h["risk_motif"][-self.k:])
+            safe_kmer = canonical_kmer(h["safe_motif"][-self.k:])
+            self.host_index[risk_kmer] = (h, True)
+            self.host_index[safe_kmer] = (h, False)
+
+    def parse_fastq(self, fastq_text):
+        """Extract sequence reads from FASTQ or plain sequence format."""
+        fastq_text = fastq_text.lstrip('\ufeff')
+        lines = [line.strip().upper() for line in fastq_text.splitlines() if line.strip()]
+        reads = []
+        if lines and lines[0].startswith("@"):
+            for i in range(1, len(lines), 4):
+                seq = lines[i]
+                if all(c in "ACGTN" for c in seq):
+                    reads.append(seq)
+        else:
+            for line in lines:
+                if len(line) >= 20 and all(c in "ACGTN" for c in line):
+                    reads.append(line)
+        return reads
+
+    def analyze(self, fastq_text):
+        start_time = time.time()
+        reads = self.parse_fastq(fastq_text)
+        
+        detected_pathogens = {}
+        detected_genes = {}
+        pathogen_coverage = {}
+        gene_coverage = {}
+        host_toxic_alerts = []
+        pathogen_reads_count = 0
+
+        total_reads = len(reads)
+        min_reads = 1 if total_reads < 50 else 3
+
+        for read in reads:
+            read_len = len(read)
+            if read_len < self.k:
+                continue
+
+            read_matched_pathogen = False
+            read_pathogen_hits = {}
+            read_gene_hits = {}
+
+            # Slide window across read
+            for i in range(read_len - self.k + 1):
+                raw_kmer = read[i:i+self.k]
+                if not all(c in "ACGT" for c in raw_kmer):
+                    continue
+                kmer = canonical_kmer(raw_kmer)
+
+                # 1. Pathogen check
+                if kmer in self.pathogen_index:
+                    for p, pos in self.pathogen_index[kmer]:
+                        pid = p["id"]
+                        read_pathogen_hits.setdefault(pid, set()).add(pos)
+
+                # 2. AMR gene check
+                if kmer in self.amr_index:
+                    for gene, pos in self.amr_index[kmer]:
+                        gid = gene["gene_id"]
+                        read_gene_hits.setdefault(gid, set()).add(pos)
+
+                # 3. Host toxicity check
+                if kmer in self.host_index:
+                    host_info, is_risk = self.host_index[kmer]
+                    if is_risk and host_info["marker_id"] not in [a["marker_id"] for a in host_toxic_alerts]:
+                        host_toxic_alerts.append(host_info)
+
+            # Evaluate read matches (requiring 3+ k-mer hits per read for robust specificity)
+            threshold = 3 if read_len >= 30 else 1
+            for pid, hit_positions in read_pathogen_hits.items():
+                if len(hit_positions) >= threshold:
+                    p_obj = next(p for p in self.db["pathogens"] if p["id"] == pid)
+                    detected_pathogens[pid] = detected_pathogens.get(pid, {"pathogen": p_obj, "count": 0})
+                    detected_pathogens[pid]["count"] += 1
+                    pathogen_coverage.setdefault(pid, set()).update(hit_positions)
+                    read_matched_pathogen = True
+
+            for gid, hit_positions in read_gene_hits.items():
+                if len(hit_positions) >= threshold:
+                    g_obj = next(g for g in self.db["resistance_genes"] if g["gene_id"] == gid)
+                    detected_genes[gid] = detected_genes.get(gid, {"gene": g_obj, "count": 0})
+                    detected_genes[gid]["count"] += 1
+                    gene_coverage.setdefault(gid, set()).update(hit_positions)
+                    read_matched_pathogen = True
+
+            if read_matched_pathogen:
+                pathogen_reads_count += 1
+
+        elapsed = round(time.time() - start_time, 3)
+        pathogen_pct = round(100 * pathogen_reads_count / total_reads) if total_reads > 0 else 0
+        host_pct = 100 - pathogen_pct
+
+        # Filter by minimum reads threshold
+        confirmed_pathogens = [
+            d for pid, d in detected_pathogens.items() if d["count"] >= min_reads
+        ]
+        confirmed_genes = [
+            d for gid, d in detected_genes.items() if d["count"] >= min_reads
+        ]
+
+        return {
+            "total_reads": total_reads,
+            "processing_seconds": elapsed,
+            "host_dna_percent": host_pct,
+            "pathogen_dna_percent": pathogen_pct,
+            "detected_pathogens": confirmed_pathogens,
+            "detected_genes": confirmed_genes,
+            "host_toxic_alerts": host_toxic_alerts
+        }
+
+if __name__ == "__main__":
+    scanner = AMRScanner("data/amr_database.json")
+    print(f"[OK] GeneRx AMR Scanner initialized with k={scanner.k}. Database aligned.")

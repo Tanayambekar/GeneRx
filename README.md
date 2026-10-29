@@ -1,6 +1,6 @@
 # 🧬 GeneRx: Point-of-Care Metagenomic Superbug Hunter 🛡️
 
-> **Compressing 72-hour bacterial Petri dishes into a 2-second bedside genomic prescription.** ⚡
+> **Compressing 72-hour bacterial Petri dishes into  genomic prescription.** ⚡
 
 [![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Zero--Install-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white)](#)
 [![Standards](https://img.shields.io/badge/Guidelines-WHO%20BPPL%202024%20%7C%20CLSI%20M100-10b981?style=for-the-badge&logo=worldhealthorganization&logoColor=white)](#)
@@ -27,7 +27,7 @@ In that blind 3-day window, doctors are forced into **empirical guesswork**—pu
 
 **GeneRx** is a zero-latency, point-of-care clinical metagenomics decision engine. 
 
-Instead of waiting days for bacteria to culture, GeneRx takes raw sequencing reads (`.fastq` files straight from a pocket-sized **Oxford Nanopore** sequencer) and analyzes them directly inside your browser in **under 2 seconds**. 🧬⚡
+Instead of waiting days for bacteria to culture, GeneRx takes raw sequencing reads (`.fastq` files straight from a pocket-sized **Oxford Nanopore** sequencer) and analyzes them directly inside your browser . 
 
 No servers. No cloud APIs. No privacy risks. 100% client-side precision medicine.
 
@@ -39,7 +39,7 @@ No servers. No cloud APIs. No privacy risks. 100% client-side precision medicine
                        │
                        ▼ Raw .fastq reads
        ┌───────────────────────────────┐
-       │   🧬 GeneRx Genomic Engine    │ ➔ ⏱️ < 2 Seconds!
+       │   🧬 GeneRx Genomic Engine    │ 
        └───────────────────────────────┘
                        │
         ┌──────────────┴──────────────┐
@@ -136,7 +136,7 @@ GeneRx requires **no installation, no server setup, and no npm build steps**.
 
 > *"Metagenomics used to require room-sized computing clusters and a team of bioinformaticians. GeneRx packages this power into an offline, 2-second tool that can run on an off-grid laptop anywhere on Earth."*
 
-* ⏱️ **Reduces Diagnostic Delay:** From 72 hours down to **< 2 seconds**.
+* ⏱️ **Reduces Diagnostic Delay:** From 72 hours down to **3-4 hours**.
 * 📉 **Saves Lives:** Eliminates the deadly blind window in ICU septic shock.
 * 👂 **Protects Patient Hearing:** Prevents accidental drug-induced deafness using dual host screening.
 * 🌿 **Safeguards Antibiotics:** Protects humanity's last-line wonder drugs for generations to come.
